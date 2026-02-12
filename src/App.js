@@ -6,8 +6,7 @@ const SOCKET_URL = 'https://aplplayerauction.onrender.com/';
 const API_URL = 'https://aplplayerauction.onrender.com/api';
 
 // Default placeholder image (SVG data URL)
-const PLACEHOLDER_IMAGE = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="40" dy="110" font-weight="bold" x="50%25" y="50%25" text-anchor="middle"%3E%F0%9F%8F%8F%3C/text%3E%3C/svg%3E';
-
+const PLACEHOLDER_IMAGE = `${SOCKET_URL}uploads/placeholder.jpg`;
 function App() {
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [timerValue, setTimerValue] = useState(20);
@@ -172,7 +171,7 @@ function App() {
             <div className="player-section">
               <div className="player-card">
                 <img 
-                  src={currentPlayer.photo?.startsWith('http') ? currentPlayer.photo : `${SOCKET_URL}/uploads${currentPlayer.photo}`} 
+                  src={currentPlayer.photo?.startsWith('http') ? currentPlayer.photo : `${SOCKET_URL}uploads${currentPlayer.photo}`} 
                   alt={currentPlayer.name}
                   className="player-photo"
                   onError={(e) => e.target.src = PLACEHOLDER_IMAGE}
