@@ -3,8 +3,8 @@ import io from 'socket.io-client';
 import LoadingAnimation from './LoadingAnimation';
 import TeamPurseBar from './TeamPurseBar';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5001/';
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'https://aplplayerauction.onrender.com/';
+const API_URL = process.env.REACT_APP_API_URL || 'https://aplplayerauction.onrender.com/api';
 const PLACEHOLDER_IMAGE = `${SOCKET_URL}uploads/defaultPlayer.png`;
 const DEFAULT_TEAM_LOGO  = `${SOCKET_URL}uploads/defaultTeam.png`;
 
@@ -12,7 +12,10 @@ const buildImgUrl = (path, base, placeholder) => {
   if (!path) return placeholder;
   if (path.startsWith('http')) return path;
   const clean = path.replace(/^\/+/, '');
-  return `${base}${clean.startsWith('uploads') ? clean : 'uploads/' + clean}`;
+  console.log('Building image URL:', { path, base, clean });
+  return `${base}${clean.startsWith('uploads/') ? clean : 'uploads/' + clean}`;
+
+
 };
 
 // Only return stats that have a real, non-zero value
