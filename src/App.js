@@ -1,264 +1,530 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import './App.css';
+import LoadingAnimation from './LoadingAnimation';
+import TeamPurseBar from './TeamPurseBar';
 
-const SOCKET_URL = 'https://aplplayerauction.onrender.com/';
-const API_URL = 'https://aplplayerauction.onrender.com/api';
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5001/';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+const PLACEHOLDER_IMAGE = `${SOCKET_URL}uploads/defaultPlayer.png`;
+const DEFAULT_TEAM_LOGO  = `${SOCKET_URL}uploads/defaultTeam.png`;
 
-// Default placeholder image (SVG data URL)
-const PLACEHOLDER_IMAGE = `${SOCKET_URL}uploads/placeholder.jpg`;
-function App() {
-  const [currentPlayer, setCurrentPlayer] = useState(null);
-  const [timerValue, setTimerValue] = useState(20);
-  const [currentBid, setCurrentBid] = useState({ amount: 5, teamName: 'No Bids Yet' });
-  const [recentlySold, setRecentlySold] = useState([]);
-  const [showSoldAnimation, setShowSoldAnimation] = useState(false);
-  const [soldInfo, setSoldInfo] = useState(null);
-  const [soldAnimationTimeout, setSoldAnimationTimeout] = useState(null);
+const buildImgUrl = (path, base, placeholder) => {
+  if (!path) return placeholder;
+  if (path.startsWith('http')) return path;
+  const clean = path.replace(/^\/+/, '');
+  return `${base}${clean.startsWith('uploads') ? clean : 'uploads/' + clean}`;
+};
 
+// Only return stats that have a real, non-zero value
+const getVisibleStats = (stats) => {
+  if (!stats) return [];
+  return [
+    { label: 'Matches',      val: stats.matches    },
+    { label: 'Runs',         val: stats.runs       },
+    { label: 'Wickets',      val: stats.wickets    },
+    { label: 'Average',      val: stats.average    },
+    { label: 'Strike Rate',  val: stats.strikeRate },
+  ].filter(s => s.val !== undefined && s.val !== null && s.val !== '' && s.val !== 0);
+};
+
+export default function App() {
+  const [currentPlayer,     setCurrentPlayer]     = useState(null);
+  const [timerValue,        setTimerValue]         = useState(20);
+  const [currentBid,        setCurrentBid]         = useState({ amount: 5, teamName: 'No Bids Yet', team: null });
+  const [recentlySold,      setRecentlySold]       = useState([]);
+  const [showSoldAnimation, setShowSoldAnimation]  = useState(false);
+  const [soldInfo,          setSoldInfo]            = useState(null);
+  const soldAnimationTimeout                        = useRef(null);
+  const [isConnecting,      setIsConnecting]        = useState(true);
+  const [showBidAnimation,  setShowBidAnimation]    = useState(false);
+  const [bidAnimationData,  setBidAnimationData]    = useState(null);
+  const [showTeamSummary,   setShowTeamSummary]     = useState(false);
+  const [teams,             setTeams]               = useState([]);
+
+  /* ── fetch teams ── */
   useEffect(() => {
-    // Connect to socket with reconnection options
-    const newSocket = io(SOCKET_URL, {
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 10
-    });
-
-    // Emit big screen connection
-    newSocket.emit('bigscreen:connect');
-
-    // Handle connection events
-    newSocket.on('connect', () => {
-      console.log('Big screen connected');
-      newSocket.emit('bigscreen:connect');
-    });
-
-    newSocket.on('disconnect', () => {
-      console.log('Big screen disconnected');
-    });
-
-    newSocket.on('reconnect', () => {
-      console.log('Big screen reconnected');
-      newSocket.emit('bigscreen:connect');
-    });
-
-    // Listen for auction state
-    newSocket.on('auction:state', (data) => {
-      if (data.state) {
-        if (data.state.currentPlayer) {
-          setCurrentPlayer(data.state.currentPlayer);
-          setCurrentBid({
-            amount: data.state.currentHighBid.amount,
-            teamName: data.state.currentHighBid.team?.teamName || 'No Bids Yet'
-          });
-        } else {
-          // No active auction - clear current player
-          setCurrentPlayer(null);
+    const fetchTeams = async () => {
+      try {
+        const res = await fetch(`${API_URL}/teams`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.teams && Array.isArray(data.teams)) setTeams(data.teams);
+          else if (Array.isArray(data)) setTeams(data);
         }
-        if (data.state.recentlySold) {
-          setRecentlySold(data.state.recentlySold);
-        }
-        setTimerValue(data.timerValue || 20);
-      }
+      } catch (e) { console.error(e); }
+    };
+    fetchTeams();
+    const iv = setInterval(fetchTeams, 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  /* ── socket ── */
+  useEffect(() => {
+    const socket = io(SOCKET_URL, { reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 10 });
+
+    socket.on('connect', () => {
+      setTimeout(() => setIsConnecting(false), 1000);
+      socket.emit('bigscreen:connect');
     });
 
-    // Listen for auction started
-    newSocket.on('auction:started', (data) => {
-      // Clear any pending sold animation timeout
-      if (soldAnimationTimeout) {
-        clearTimeout(soldAnimationTimeout);
-        setSoldAnimationTimeout(null);
-      }
-      
+    socket.on('auction:state', (data) => {
+      if (!data.state) return;
+      if (data.state.currentPlayer) {
+        setCurrentPlayer(data.state.currentPlayer);
+        setCurrentBid({
+          amount:   data.state.currentHighBid.amount,
+          teamName: data.state.currentHighBid.team?.teamName || 'No Bids Yet',
+          team:     data.state.currentHighBid.team || null,
+        });
+      } else setCurrentPlayer(null);
+      if (data.state.recentlySold) setRecentlySold(data.state.recentlySold);
+      setTimerValue(data.timerValue || 20);
+    });
+
+    socket.on('auction:started', (data) => {
+      if (soldAnimationTimeout.current) clearTimeout(soldAnimationTimeout.current);
       setShowSoldAnimation(false);
       setCurrentPlayer(data.player);
-      setCurrentBid({ amount: data.basePrice, teamName: 'Base Price' });
+      setCurrentBid({ amount: data.basePrice, teamName: 'Base Price', team: null });
       setTimerValue(data.timerValue);
     });
 
-    // Listen for new bids
-    newSocket.on('bid:new', (data) => {
-      setCurrentBid({
-        amount: data.amount,
-        teamName: data.teamName
-      });
-    });
-
-    // Listen for timer updates
-    newSocket.on('timer:update', (data) => {
-      setTimerValue(data.value);
-    });
-
-    // Listen for timer reset
-    newSocket.on('timer:reset', (data) => {
-      setTimerValue(data.value);
-    });
-
-    // Listen for player sold
-    newSocket.on('player:sold', (data) => {
-      // Clear any existing timeout
-      if (soldAnimationTimeout) {
-        clearTimeout(soldAnimationTimeout);
+    socket.on('bid:new', async (data) => {
+      let teamData = data.team;
+      if (!teamData && data.teamId) {
+        try {
+          const res = await fetch(`${API_URL}/teams`);
+          if (res.ok) {
+            const result = await res.json();
+            teamData = (result.teams || result).find(t => t._id === data.teamId);
+          }
+        } catch (e) { console.error(e); }
       }
-      
+      setCurrentBid({ amount: data.amount, teamName: data.teamName, team: teamData || null });
+      if (teamData || data.teamName) {
+        const purse = teamData?.remainingPoints || teamData?.purseBudget || 0;
+        setBidAnimationData({
+          teamName:      data.teamName,
+          teamLogo:      teamData?.logo || '',
+          amount:        data.amount,
+          remainingPurse: purse - data.amount,
+        });
+        setShowBidAnimation(true);
+        setTimeout(() => setShowBidAnimation(false), 2500);
+      }
+    });
+
+    socket.on('timer:update', (d) => setTimerValue(d.value));
+    socket.on('timer:reset',  (d) => setTimerValue(d.value));
+    socket.on('teams:status', (d) => { if (d.teams && Array.isArray(d.teams)) setTeams(d.teams); });
+
+    socket.on('player:sold', (data) => {
+      if (soldAnimationTimeout.current) clearTimeout(soldAnimationTimeout.current);
       setSoldInfo(data);
       setShowSoldAnimation(true);
-      
-      // Hide animation after 5 seconds but don't clear player
-      const timeout = setTimeout(() => {
+      socket.emit('bigscreen:summaryStarting');
+      const t = setTimeout(() => {
         setShowSoldAnimation(false);
-        setSoldAnimationTimeout(null);
-        // Don't set currentPlayer to null - let the next auction or explicit state change handle it
+        soldAnimationTimeout.current = null;
+        setShowTeamSummary(true);
+        setTimeout(() => { setShowTeamSummary(false); socket.emit('bigscreen:summaryComplete'); }, 10000);
       }, 5000);
-      
-      setSoldAnimationTimeout(timeout);
-
-      // Update recently sold
+      soldAnimationTimeout.current = t;
       if (data.team) {
         setRecentlySold(prev => [
           { player: data.player, team: data.team, amount: data.amount, soldAt: new Date() },
-          ...prev.slice(0, 9)
+          ...prev.slice(0, 9),
         ]);
       }
     });
 
-    // Cleanup
     return () => {
-      if (soldAnimationTimeout) {
-        clearTimeout(soldAnimationTimeout);
-      }
-      newSocket.close();
+      if (soldAnimationTimeout.current) clearTimeout(soldAnimationTimeout.current);
+      socket.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const getTimerColor = () => {
-    if (timerValue > 15) return '#4CAF50'; // Green
-    if (timerValue > 5) return '#FFC107'; // Yellow
-    return '#F44336'; // Red
-  };
-
-  const formatStat = (value) => {
-    return value !== undefined && value !== null ? value : '-';
-  };
+  /* ── timer colour ── */
+  const timerRing = timerValue > 15 ? 'border-emerald-400 bg-emerald-50' : timerValue > 5 ? 'border-amber-400 bg-amber-50' : 'border-red-400 bg-red-50';
+  const timerText = timerValue > 15 ? 'text-emerald-600' : timerValue > 5 ? 'text-amber-600' : 'text-red-600';
 
   return (
-    <div className="app">
+    <div className="h-screen min-h-screen overflow-hidden flex flex-col bg-slate-50 text-slate-900">
+
+      {/* Animation keyframes — only motion, no layout/colour */}
+      <style>{`
+        @keyframes sold-slam { 0%{transform:scale(.65) translateY(20px);opacity:0} 65%{transform:scale(1.04) translateY(-4px);opacity:1} 100%{transform:scale(1) translateY(0);opacity:1} }
+        @keyframes bid-pop   { 0%{transform:translateY(64px) scale(.9);opacity:0} 60%{transform:translateY(-5px) scale(1.02);opacity:1} 100%{transform:translateY(0) scale(1);opacity:1} }
+        @keyframes fade-up   { from{transform:translateY(12px);opacity:0} to{transform:translateY(0);opacity:1} }
+        @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:.3} }
+        @keyframes beat      { 0%,100%{transform:scale(1)} 50%{transform:scale(1.07)} }
+        @keyframes prog      { from{width:100%} to{width:0%} }
+        .anim-sold { animation: sold-slam .55s cubic-bezier(.34,1.4,.64,1) forwards }
+        .anim-bid  { animation: bid-pop   .45s cubic-bezier(.34,1.4,.64,1) forwards }
+        .anim-up   { animation: fade-up   .4s ease forwards }
+        .anim-live { animation: blink 1.4s ease infinite }
+        .anim-beat { animation: beat  .65s ease infinite }
+        .anim-prog { animation: prog  10s linear forwards }
+        .no-sb::-webkit-scrollbar            { display:none }
+        .no-sb                               { scrollbar-width:none; -ms-overflow-style:none }
+        .thin-sb::-webkit-scrollbar          { width:3px }
+        .thin-sb::-webkit-scrollbar-thumb    { background:#CBD5E1; border-radius:6px }
+        .thin-sb::-webkit-scrollbar-track    { background:transparent }
+      `}</style>
+
+      {isConnecting && <LoadingAnimation message="Establishing Connection…" />}
+
+      {/* ══════════════════════════════════════
+          SOLD / UNSOLD SCREEN
+      ══════════════════════════════════════ */}
       {showSoldAnimation && soldInfo ? (
-        <div className="sold-animation">
-          <div className="sold-content">
-            <h1 className="sold-text">{soldInfo.team ? 'SOLD' : 'UNSOLD'}</h1>
-            <div className="sold-player-info">
-              <img 
-                src={soldInfo.player.photo?.startsWith('http') ? soldInfo.player.photo : `${API_URL}${soldInfo.player.photo}`} 
+        <div className={`fixed inset-0 z-[1000] flex items-center justify-center p-4 ${soldInfo.team ? 'bg-emerald-50' : 'bg-slate-100'}`}>
+          <div className="anim-sold flex flex-col items-center w-full max-w-md text-center">
+
+            <h1 className={`font-black leading-none tracking-tight mb-5
+              text-6xl sm:text-8xl md:text-9xl
+              ${soldInfo.team ? 'text-emerald-500' : 'text-slate-400'}`}>
+              {soldInfo.team ? 'SOLD!' : 'UNSOLD'}
+            </h1>
+
+            <div className="w-full bg-white rounded-3xl border border-slate-200 shadow-2xl p-5 sm:p-8">
+              <img
+                src={buildImgUrl(soldInfo.player.photo, SOCKET_URL, PLACEHOLDER_IMAGE)}
+                onError={e => e.target.src = PLACEHOLDER_IMAGE}
                 alt={soldInfo.player.name}
-                className="sold-player-photo"
-                onError={(e) => e.target.src = PLACEHOLDER_IMAGE}
+                className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl object-cover border-2 border-slate-100 shadow-md mx-auto mb-4"
               />
-              <h2>{soldInfo.player.name}</h2>
-              <h3>{soldInfo.team ? soldInfo.team.teamName : 'UNSOLD'}</h3>
-              <div className="sold-amount">₹{soldInfo.amount} Points</div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-800 mb-4 leading-tight">
+                {soldInfo.player.name}
+              </h2>
+
+              {soldInfo.team && (
+                <div className="flex items-center justify-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 mb-4">
+                  <img
+                    src={buildImgUrl(soldInfo.team.logo, SOCKET_URL, DEFAULT_TEAM_LOGO)}
+                    onError={e => e.target.src = DEFAULT_TEAM_LOGO}
+                    alt={soldInfo.team.teamName}
+                    className="w-10 h-10 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                  />
+                  <span className="text-lg sm:text-xl font-black text-blue-700 truncate">
+                    {soldInfo.team.teamName}
+                  </span>
+                </div>
+              )}
+
+              <div className="inline-block bg-blue-600 text-white rounded-2xl px-8 py-4">
+                <span className="text-3xl sm:text-4xl font-black">{soldInfo.amount}</span>
+                <span className="text-sm font-medium opacity-70 ml-2">Pts</span>
+              </div>
             </div>
           </div>
         </div>
+
+      /* ══════════════════════════════════════
+          MAIN AUCTION VIEW
+      ══════════════════════════════════════ */
       ) : currentPlayer ? (
-        <div className="main-screen">
-          <div className="header">
-            <h1>LIVE AUCTION</h1>
-          </div>
+        <div className="flex flex-col h-full overflow-hidden">
 
-          <div className="content-grid">
-            <div className="player-section">
-              <div className="player-card">
-                <img 
-                  src={currentPlayer.photo?.startsWith('http') ? currentPlayer.photo : `${SOCKET_URL}uploads${currentPlayer.photo}`} 
-                  alt={currentPlayer.name}
-                  className="player-photo"
-                  onError={(e) => e.target.src = PLACEHOLDER_IMAGE}
-                />
-                <div className="player-info">
-                  <h2 className="player-name">{currentPlayer.name}</h2>
-                  <span className="player-category">{currentPlayer.category}</span>
-                  
-                  <div className="player-stats">
-                    <div className="stat">
-                      <span className="stat-label">Matches</span>
-                      <span className="stat-value">{formatStat(currentPlayer.stats?.matches)}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-label">Runs</span>
-                      <span className="stat-value">{formatStat(currentPlayer.stats?.runs)}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-label">Wickets</span>
-                      <span className="stat-value">{formatStat(currentPlayer.stats?.wickets)}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-label">Average</span>
-                      <span className="stat-value">{formatStat(currentPlayer.stats?.average)}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-label">Strike Rate</span>
-                      <span className="stat-value">{formatStat(currentPlayer.stats?.strikeRate)}</span>
-                    </div>
+          {/* Header */}
+          <header className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm z-10" onClick={() => setShowTeamSummary(true)}>
+            <div className="flex items-center justify-between px-4 py-2.5 sm:px-6 sm:py-3">
+              <div className="flex items-center gap-2" >
+                <span className="text-xl" aria-hidden><img src="/assets/main_logo.png" alt="App Logo" className="w-6 h-6" /></span>
+                <span className="text-sm sm:text-base md:text-lg font-black tracking-widest text-slate-800 uppercase">
+                  APL Auction
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+               
+                <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-600 px-2.5 py-1 rounded-full">
+                  <span className="anim-live block w-1.5 h-1.5 rounded-full bg-red-500" />
+                  <span className="text-[10px] sm:text-xs font-bold tracking-widest uppercase">Live</span>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Body — stacks vertically on mobile, side-by-side on lg+ */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-2 p-2 sm:gap-3 sm:p-3 md:gap-4 md:p-4">
+
+            {/* ── Player Card ── */}
+            <div className="anim-up rounded-xl sm:rounded-2xl m-2 border border-slate-200 shadow-md flex flex-col items-center justify-center p-3 sm:p-4 md:p-6 overflow-auto no-sb
+            ">
+              {/* backkground image */
+              <img
+                src="/assets/main_logo.png"
+                alt="Stadium Background"
+                className="absolute inset-0 w-full h-full object-cover opacity-10"
+              />}
+
+              {/* Photo */}
+              <img
+                src={buildImgUrl(currentPlayer.photo, SOCKET_URL, PLACEHOLDER_IMAGE)}
+                onError={e => e.target.src = PLACEHOLDER_IMAGE}
+                alt={currentPlayer.name}
+                className="w-20 h-20 sm:w-28 sm:h-28 md:w-36 md:h-36 lg:w-44 lg:h-44 rounded-xl sm:rounded-2xl object-cover
+                           border-2 border-slate-100 shadow-lg mb-2 sm:mb-3 md:mb-4 flex-shrink-0"
+              />
+
+              {/* Name */}
+              <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 text-center leading-tight mb-1 sm:mb-2">
+                {currentPlayer.name}
+              </h2>
+
+              {/* Category */}
+              {currentPlayer.category && (
+                <span className="text-[9px] sm:text-[10px] md:text-xs font-bold tracking-widest uppercase
+                                 bg-blue-50 text-blue-600 border border-blue-200
+                                 px-2 sm:px-3 md:px-4 py-0.5 sm:py-1 rounded-full mb-2 sm:mb-3 md:mb-5">
+                  {currentPlayer.category}
+                </span>
+              )}
+
+              {/* Stats — only rendered when ≥1 stat exists */}
+              {(() => {
+                const stats = getVisibleStats(currentPlayer.stats);
+                if (stats.length === 0) return null;
+                return (
+                  <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 w-full">
+                    {stats.map((s, i) => (
+                      <div key={i} className="flex-1 min-w-[56px] max-w-[90px]
+                                              bg-slate-50 border border-slate-200
+                                              rounded-lg sm:rounded-xl p-1.5 sm:p-2 md:p-3 text-center">
+                        <p className="text-[8px] sm:text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">
+                          {s.label}
+                        </p>
+                        <p className="text-xs sm:text-sm md:text-xl lg:text-2xl font-black text-slate-800 leading-none">
+                          {s.val}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
-            <div className="bid-section">
-              <div className="timer-container">
-                <div 
-                  className="timer"
-                  style={{ 
-                    backgroundColor: getTimerColor(),
-                    animation: timerValue <= 5 ? 'pulse 1s infinite' : 'none'
-                  }}
-                >
-                  <span className="timer-value">{timerValue}</span>
+            {/* ── Timer + Bid ── */}
+            <div className="anim-up bg-white rounded-xl sm:rounded-2xl border border-slate-200 shadow-md
+                            flex flex-col items-center justify-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 md:p-6 overflow-hidden">
+
+              {/* Timer circle */}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`w-20 h-20 sm:w-28 sm:h-28 md:w-36 md:h-36 rounded-full border-4 flex items-center justify-center
+                                 transition-all duration-300 ${timerRing} ${timerValue <= 5 ? 'anim-beat' : ''}`}>
+                  <span className={`text-3xl sm:text-5xl md:text-6xl font-black leading-none transition-colors duration-300 ${timerText}`}>
+                    {timerValue}
+                  </span>
+                </div>
+                <p className="text-[9px] sm:text-[10px] font-bold tracking-widest text-slate-400 uppercase">Seconds Left</p>
+              </div>
+
+              {/* Divider */}
+              <div className="w-full h-px bg-slate-100" />
+
+              {/* Bid box */}
+              <div className="w-full bg-blue-50 border border-blue-200 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 text-center">
+                <p className="text-[9px] sm:text-[10px] font-bold tracking-widest text-blue-400 uppercase mb-1">Current Bid</p>
+                <p className="text-2xl sm:text-4xl md:text-5xl font-black text-blue-700 leading-none mb-2 sm:mb-3">
+                  {currentBid.amount}
+                </p>
+
+                {/* Team chip */}
+                <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-white border border-slate-200
+                                rounded-full pl-1 sm:pl-1.5 pr-2 sm:pr-4 py-0.5 sm:py-1 shadow-sm max-w-full overflow-hidden">
+                  {currentBid.team && (
+                    <img
+                      src={buildImgUrl(currentBid.team.logo, SOCKET_URL, DEFAULT_TEAM_LOGO)}
+                      onError={e => e.target.src = DEFAULT_TEAM_LOGO}
+                      alt={currentBid.team.teamName}
+                      className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                    />
+                  )}
+                  <span className="text-xs sm:text-sm font-bold text-slate-700 truncate max-w-[120px] sm:max-w-[180px]">
+                    {currentBid.teamName}
+                  </span>
                 </div>
               </div>
 
-              <div className="current-bid">
-                <div className="bid-label">CURRENT BID</div>
-                <div className="bid-amount">₹{currentBid.amount}</div>
-                <div className="bid-team">{currentBid.teamName}</div>
-              </div>
-
-              <div className="base-price">
-                Base Price: ₹{currentPlayer.basePrice}
-              </div>
+              {/* Base price */}
+              <p className="text-[10px] sm:text-xs text-slate-400 font-medium">
+                Base Price: <span className="text-slate-700 font-bold">{currentPlayer.basePrice}</span>
+              </p>
             </div>
-          </div>
+          </main>
 
-          <div className="ticker">
-            <div className="ticker-title">RECENTLY SOLD</div>
-            <div className="ticker-content">
+          {/* ── Sold Gallery footer ── */}
+          <footer className="flex-shrink-0 bg-white border-t border-slate-200 px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-3">
+            <p className="text-[8px] sm:text-[9px] font-black tracking-widest text-slate-400 uppercase mb-1 sm:mb-2">Sold Gallery</p>
+            <div className="no-sb flex gap-1.5 sm:gap-2 overflow-x-auto pb-1">
               {recentlySold.length > 0 ? (
-                recentlySold.map((item, index) => (
-                  <div key={index} className="ticker-item">
-                    <span className="ticker-player">{item.player?.name || 'Player'}</span>
-                    <span className="ticker-separator">→</span>
-                    <span className="ticker-team">{item.team?.teamName || 'Team'}</span>
-                    <span className="ticker-price">₹{item.amount}</span>
+                recentlySold.map((item, i) => (
+                  <div key={i} className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2
+                                          bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl px-2 sm:px-3 py-1 sm:py-2">
+                    <span className="text-[10px] sm:text-xs md:text-sm font-semibold text-slate-700 whitespace-nowrap">
+                      {item.player?.name}
+                    </span>
+                    <div className="w-px h-2.5 sm:h-3 bg-slate-300" />
+                    <span className="text-[10px] sm:text-xs md:text-sm font-black text-blue-600 whitespace-nowrap">
+                      {item.amount}
+                    </span>
+                    <span className="text-[9px] sm:text-[10px] font-bold bg-slate-200 text-slate-500 px-1.5 sm:px-2 py-0.5 rounded-md whitespace-nowrap">
+                      {item.team?.teamName}
+                    </span>
                   </div>
                 ))
               ) : (
-                <div className="ticker-item">No players sold yet</div>
+                <p className="text-[10px] sm:text-xs text-slate-300 italic px-1 py-1">Awaiting first sale…</p>
               )}
+            </div>
+          </footer>
+        </div>
+
+      /* ══════════════════════════════════════
+          LOBBY / WAITING SCREEN
+      ══════════════════════════════════════ */
+      ) : (
+        <div className="flex flex-col items-center justify-center h-full gap-4
+                        bg-gradient-to-b from-slate-50 to-slate-100 px-4" onClick={() => setShowTeamSummary(true)}>
+          <span className="text-7xl sm:text-8xl opacity-80 select-none" aria-hidden>
+          <img
+                src="/assets/main_logo.png"
+                alt="Cricket Animation"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}></img>
+          </span>
+          <h1 className="text-lg sm:text-4xl font-black tracking-widest text-slate-300 uppercase text-center">
+            Welcome To AtomBerg Premier League Auction
+          </h1>
+
+          <div className="flex items-center gap-2" >
+            <span className="anim-live block w-4 h-4 rounded-full bg-blue-400"  />
+            <span className="anim-live block w-4 h-4 rounded-full bg-blue-400" />
+            <span className="anim-live block w-4 h-4 rounded-full bg-blue-400" /><span className="anim-live block w-4 h-4 rounded-full bg-blue-400" />
+            <span className="text-[10px] sm:text-xs font-bold tracking-widest text-slate-400 uppercase">
+              
+              
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          BID NOTIFICATION TOAST
+      ══════════════════════════════════════ */}
+      {showBidAnimation && bidAnimationData && (
+        <div className="fixed inset-0 flex items-end justify-center p-4 z-[9999] pointer-events-none">
+          <div className="anim-bid w-full max-w-sm bg-white border border-slate-200
+                          rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-4">
+            <img
+              src={bidAnimationData.teamLogo
+                ? buildImgUrl(bidAnimationData.teamLogo, SOCKET_URL, DEFAULT_TEAM_LOGO)
+                : DEFAULT_TEAM_LOGO}
+              onError={e => e.target.src = DEFAULT_TEAM_LOGO}
+              alt={bidAnimationData.teamName}
+              className="w-14 h-14 rounded-full object-cover border-2 border-slate-200 flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold tracking-widest text-blue-500 uppercase mb-0.5">New Bid</p>
+              <p className="text-base font-black text-slate-800 truncate">{bidAnimationData.teamName}</p>
+              <p className="text-2xl font-black text-blue-600 leading-none">{bidAnimationData.amount}</p>
             </div>
           </div>
         </div>
-      ) : (
-        <div className="waiting-screen">
-          <h1>Waiting for Auction to Start...</h1>
-          <div className="waiting-message">
-            Admin will begin the auction shortly
+      )}
+
+      {/* ══════════════════════════════════════
+          TEAM SUMMARY SCREEN
+      ══════════════════════════════════════ */}
+      {showTeamSummary && (
+        <div className="fixed inset-0 bg-slate-50 z-[999] flex flex-col overflow-hidden">
+
+          
+                <div className="flex-shrink-0 flex items-center justify-between
+                        px-4 py-3 sm:px-6 sm:py-4 bg-white border-b border-slate-200 shadow-sm">
+                <h1 className="text-xl sm:text-3xl md:text-4xl font-black tracking-tight text-slate-900">
+                  Squad Updates
+                </h1>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowTeamSummary(false)}
+                    className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors duration-200 shadow-sm"
+                  >
+                    Close
+                  </button>
+                  <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200
+                          text-blue-600 px-3 py-1.5 rounded-full">
+                    <span className="anim-live block w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-[10px] font-bold tracking-widest uppercase">Reviewing</span>
+                  </div>
+                </div>
+                </div>
+
+                {/* Teams grid */}
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                  {Array.isArray(teams) && teams.map(team => (
+                  <div key={team._id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+                    {/* Team header */}
+                  <div className="flex items-center gap-3 p-4 border-b border-slate-100">
+                    <img
+                      src={buildImgUrl(team.logo, SOCKET_URL, DEFAULT_TEAM_LOGO)}
+                      onError={e => e.target.src = DEFAULT_TEAM_LOGO}
+                      alt={team.teamName}
+                      className="w-11 h-11 rounded-full object-cover border border-slate-200 flex-shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-800 text-base leading-tight truncate">
+                        {team.teamName}
+                      </p>
+                      <p className="hidden sm:block text-sm font-bold text-blue-600">{team.purseBudget || 0} Purse</p>
+                    </div>
+                  </div>
+
+                  {/* Player slots */}
+                  <div className="thin-sb p-3 max-h-64 overflow-y-auto space-y-1.5">
+                    {Array(11).fill(null).map((_, i) => {
+                      const p = team.players?.[i];
+                      return (
+                        <div key={i}
+                          className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm
+                            ${p
+                              ? 'bg-blue-50 border border-blue-100'
+                              : 'bg-slate-50 border border-dashed border-slate-200 opacity-40'}`}>
+                          <span className={`font-semibold truncate ${p ? 'text-black-700' : 'text-slate-400'}`}>
+                            {p ? p.name : `Slot ${i + 1}`}
+                          </span>
+                          {p && (
+                            <span className="font-black text-blue-600 ml-2 flex-shrink-0">
+                              {p.soldPrice}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Progress bar */}
+          <div className="flex-shrink-0 h-1 bg-slate-200">
+            <div className="anim-prog h-full bg-blue-500 rounded-full" />
+          </div>
+        </div>
+      )}
+
+      {/* Team Purse Bar - Hidden on mobile */}
+      {!showSoldAnimation && !showTeamSummary && (
+        <div className="hidden md:block">
+          <TeamPurseBar teams={teams} socketUrl={SOCKET_URL} />
         </div>
       )}
     </div>
   );
 }
-
-export default App;
