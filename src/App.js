@@ -490,7 +490,7 @@ export default function App() {
 
                   {/* Player slots */}
                   <div className="thin-sb p-3 max-h-64 overflow-y-auto space-y-1.5">
-                    {Array(11).fill(null).map((_, i) => {
+                    {Array(14).fill(null).map((_, i) => {
                       const p = team.players?.[i];
                       return (
                         <div key={i}
