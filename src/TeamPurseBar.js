@@ -27,7 +27,7 @@ const TeamPurseBar = ({ teams, socketUrl }) => {
       <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-6 overflow-x-auto no-scrollbar">
           {sortedTeams.map((team) => {
-            const pursePercentage = (team.remainingPoints / 110) * 100;
+            const pursePercentage = (team.remainingPoints / 1000) * 100;
             
             return (
               <div
@@ -77,7 +77,7 @@ const TeamPurseBar = ({ teams, socketUrl }) => {
                     {team.remainingPoints}
                   </div>
                   <div className="text-[10px] text-slate-500 font-semibold">
-                    {team.rosterSlotsFilled || 0}/11
+                    {team.rosterSlotsFilled || 0}/14
                   </div>
                 </div>
 
