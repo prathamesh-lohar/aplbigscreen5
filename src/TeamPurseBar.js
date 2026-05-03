@@ -1,6 +1,6 @@
 import React from 'react';
 
-const TeamPurseBar = ({ teams, socketUrl }) => {
+const TeamPurseBar = ({ teams, maxSquadSize = 11, initialBudget = 110, socketUrl }) => {
   if (!teams || teams.length === 0) {
     return null;
   }
@@ -27,13 +27,12 @@ const TeamPurseBar = ({ teams, socketUrl }) => {
       <div className="px-4 py-3">
         <div className="flex items-center justify-between gap-6 overflow-x-auto no-scrollbar">
           {sortedTeams.map((team) => {
-            const pursePercentage = (team.remainingPoints / 1000) * 100;
+            const pursePercentage = (team.remainingPoints / initialBudget) * 100;
             
             return (
               <div
                 key={team._id}
                 className={`flex items-center gap-3 bg-slate-50 rounded-2xl px-4 py-2 border-2 ${getBorderClass(team.remainingPoints)} flex-shrink-0 min-w-[200px] shadow-md hover:shadow-lg transition-all duration-200`}
-                
               >
                 {/* Team Logo */}
                 {team.logo && (
@@ -74,10 +73,10 @@ const TeamPurseBar = ({ teams, socketUrl }) => {
                            '#22c55e, #16a34a'
                          })`
                        }}>
-                    {team.remainingPoints}
+                    ₹{team.remainingPoints}
                   </div>
                   <div className="text-[10px] text-slate-500 font-semibold">
-                    {team.rosterSlotsFilled || 0}/14
+                    {team.rosterSlotsFilled || 0}/{maxSquadSize}
                   </div>
                 </div>
 
