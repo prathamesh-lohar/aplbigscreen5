@@ -3,8 +3,8 @@ import io from "socket.io-client";
 import LoadingAnimation from "./LoadingAnimation";
 import TeamPurseBar from "./TeamPurseBar";
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || "http://localhost:5000/";
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || "https://aplplayerauction.onrender.com/";
+const API_URL = process.env.REACT_APP_API_URL || "https://aplplayerauction.onrender.com/api";
 
 // Ensure SOCKET_URL ends with a slash
 const normalizeUrl = (url) => (url.endsWith("/") ? url : url + "/");
@@ -24,7 +24,7 @@ const buildImgUrl = (path, base, placeholder) => {
   // Normalize base URL to ensure it has protocol and trailing slash
   let normalizedBase = base;
   if (!normalizedBase.startsWith("http")) {
-    normalizedBase = "http://localhost:5000/";
+    normalizedBase = "https://aplplayerauction.onrender.com//";
   }
   normalizedBase = normalizedBase.endsWith("/")
     ? normalizedBase
