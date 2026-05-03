@@ -404,7 +404,7 @@ export default function App() {
       setSoldInfo(data);
       setShowSoldAnimation(true);
 
-      if (soldThemeRef.current) {
+      if (soldThemeRef.current && data.team && data.team !== "UNSOLD") {
         playAudioFromStart(soldThemeRef);
       }
 
@@ -568,7 +568,7 @@ export default function App() {
                 <p className="text-xl sm:text-2xl lg:text-3xl font-black text-[#000000]/90 mt-1">{setIntro.label}</p>
                 <div className="mt-3 sm:mt-4 bg-white/15 rounded-xl sm:rounded-2xl px-4 py-2.5 sm:py-3">
                   <p className="text-[#000000]/60 text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5">Base Price</p>
-                  <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#000000]">₹{setIntro.basePrice}L</p>
+                  <p className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#000000]">{setIntro.basePrice}L</p>
                 </div>
                 <p className="mt-3 text-[#000000]/70 text-xs sm:text-sm">
                   <span className="font-black text-[#000000] text-base sm:text-lg">{setIntro.totalPlayers}</span> Players
@@ -704,7 +704,7 @@ export default function App() {
           ? "bg-white text-slate-900 shadow-emerald-500/20" 
           : "bg-slate-700 text-slate-300 shadow-black"}`}>
         <div className="flex items-baseline gap-1">
-           <span className="text-xl font-bold">₹</span>
+           <span className="text-xl font-bold"></span>
            <span className="text-5xl sm:text-6xl font-black tabular-nums tracking-tighter">
              {soldInfo.amount.toLocaleString('en-IN')}
            </span>
@@ -733,10 +733,10 @@ export default function App() {
             <div className="flex items-center justify-between px-4 py-2.5 sm:px-6 sm:py-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl" aria-hidden>
-                  🏏
+                  <img src="/assets/image.png" alt="A"  className="w-[60px] h-[60px] rounded-full shadow-lg"/>
                 </span>
                 <span className="text-sm sm:text-base md:text-lg font-black tracking-widest text-slate-800 uppercase">
-                  Cricket Auction
+                  Atomberg Premier League
                 </span>
               </div>
               <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-600 px-2.5 py-1 rounded-full">
@@ -834,7 +834,7 @@ export default function App() {
                   Current Bid
                 </p>
                 <p className="text-2xl sm:text-4xl md:text-5xl font-black text-[#000000] leading-none mb-2 sm:mb-3">
-                  ₹{currentBid.amount}
+                  {currentBid.amount}
                 </p>
 
                 {/* Team chip */}
@@ -860,7 +860,7 @@ export default function App() {
               <p className="text-[10px] sm:text-xs text-slate-400 font-medium">
                 Base Price:{" "}
                 <span className="text-slate-700 font-bold">
-                  ₹{currentPlayer.basePrice}
+                  {currentPlayer.basePrice}
                 </span>
               </p>
             </div>
@@ -884,7 +884,7 @@ export default function App() {
                     </span>
                     <div className="w-px h-2.5 sm:h-3 bg-slate-300" />
                     <span className="text-[10px] sm:text-xs md:text-sm font-black text-[#000000] whitespace-nowrap">
-                      ₹{item.amount}
+                      {item.amount}
                     </span>
                     <span className="text-[9px] sm:text-[10px] font-bold bg-slate-200 text-slate-500 px-1.5 sm:px-2 py-0.5 rounded-md whitespace-nowrap">
                       {item.team?.teamName}
@@ -984,7 +984,7 @@ export default function App() {
       {/* Amount Display */}
       <div className="flex items-baseline gap-1 md:gap-3">
         <span className="text-xl md:text-4xl font-bold text-[#000000] italic">
-          ₹
+          
         </span>
         <p className="text-4xl md:text-3xl font-black text-[#000000] leading-none tracking-tighter tabular-nums drop-shadow-lg">
           {bidAnimationData.amount.toLocaleString('en-IN')}
@@ -1071,7 +1071,7 @@ export default function App() {
                           {team.teamName}
                         </p>
                         <p className="hidden sm:block text-sm font-bold text-[#000000]">
-                          ₹{team.remainingPoints || team.purseBudget || 0} Purse
+                          {team.remainingPoints || team.purseBudget || 0} Purse
                         </p>
                       </div>
                     </div>
@@ -1099,7 +1099,7 @@ export default function App() {
                               </span>
                               {p && (
                                 <span className="font-black text-[#000000] ml-2 flex-shrink-0">
-                                  ₹{p.soldPrice}
+                                  {p.soldPrice}
                                 </span>
                               )}
                             </div>

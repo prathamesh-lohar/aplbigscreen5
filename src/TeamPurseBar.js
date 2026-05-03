@@ -73,7 +73,7 @@ const TeamPurseBar = ({ teams, maxSquadSize = 11, initialBudget = 110, socketUrl
                            '#22c55e, #16a34a'
                          })`
                        }}>
-                    ₹{team.remainingPoints}
+                    {team.remainingPoints}
                   </div>
                   <div className="text-[10px] text-slate-500 font-semibold">
                     {team.rosterSlotsFilled || 0}/{maxSquadSize}
