@@ -3,8 +3,8 @@ import io from "socket.io-client";
 import LoadingAnimation from "./LoadingAnimation";
 import TeamPurseBar from "./TeamPurseBar";
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || "https://aplplayerauction.onrender.com/";
-const API_URL = process.env.REACT_APP_API_URL || "https://aplplayerauction.onrender.com/api";
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || "http://localhost:5000/";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 // Ensure SOCKET_URL ends with a slash
 const normalizeUrl = (url) => (url.endsWith("/") ? url : url + "/");
@@ -24,7 +24,7 @@ const buildImgUrl = (path, base, placeholder) => {
   // Normalize base URL to ensure it has protocol and trailing slash
   let normalizedBase = base;
   if (!normalizedBase.startsWith("http")) {
-    normalizedBase = "https://aplplayerauction.onrender.com//";
+    normalizedBase = "http://localhost:5000/";
   }
   normalizedBase = normalizedBase.endsWith("/")
     ? normalizedBase
@@ -971,22 +971,22 @@ export default function App() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 md:h-3 md:w-3 bg-red-500"></span>
         </span>
-        <p className="text-[10px] md:text-xs font-black tracking-[0.2em] text-[#000000] uppercase">
+        <p className="text-[10px] md:text-xs font-black tracking-[0.2em] text-[#ffffff] uppercase">
           Current High Bidder
         </p>
       </div>
 
       {/* Team Name */}
-      <h2 className="text-2xl md:text-5xl font-black text-[#000000] truncate leading-tight uppercase italic tracking-tighter mb-1">
+      <h2 className="text-2xl md:text-5xl font-black text-[#ffffff] truncate leading-tight uppercase italic tracking-tighter mb-1">
         {bidAnimationData.teamName}
       </h2>
 
       {/* Amount Display */}
       <div className="flex items-baseline gap-1 md:gap-3">
-        <span className="text-xl md:text-4xl font-bold text-[#000000] italic">
+        <span className="text-xl md:text-4xl font-bold text-[#ffffff] italic">
           
         </span>
-        <p className="text-4xl md:text-3xl font-black text-[#000000] leading-none tracking-tighter tabular-nums drop-shadow-lg">
+        <p className="text-4xl md:text-3xl font-black text-[#ffffff] leading-none tracking-tighter tabular-nums drop-shadow-lg">
           {bidAnimationData.amount.toLocaleString('en-IN')}
         </p>
       </div>
@@ -994,7 +994,7 @@ export default function App() {
 
     {/* Vertical Decorative Text (Hidden on small mobile) */} 
 <div className="hidden lg:flex absolute right-0 top-0 bottom-0 w-12 items-center justify-center border-l border-white/5 bg-white/[0.02]">
-  <p className="text-[10px] font-black tracking-[1rem] text-[#000000]/20 uppercase whitespace-nowrap rotate-90 origin-center translate-x-1">
+  <p className="text-[10px] font-black tracking-[1rem] text-[#ffffff]/20 uppercase whitespace-nowrap rotate-90 origin-center translate-x-1">
     AUCTION
   </p>
 </div>
